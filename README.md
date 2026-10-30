@@ -31,7 +31,9 @@ npm run build                # statische Seite in dist/
 | `src/services/geocode.ts` | Ortssuche (Photon) |
 | `src/lib/share.ts` | Plan als Link, Kalender (.ics), Google-Maps-Route |
 | `src/lib/surprise.ts` | „Überrasch mich"-Zufalls-Date |
-| `src/components/` | Karte, Filter, Liste, Detailkarte, Plan, Favoriten |
+| `src/components/` | Karte, Filter, Liste, Detailkarte, Plan, Favoriten, Icons |
+| `src/styles/planner-ui.css` | Design-System „Spotly UI" (Farben, Schrift, Abstände als CSS-Variablen + Bausteine) |
+| `src/styles/app.css` | Aufbau der App, nutzt nur die Variablen aus `planner-ui.css` |
 
 Projektdoku & Entscheidungen: Obsidian-Vault → `02 Coding/Apps/Date Planer/Date Planer Hub.md`.
 

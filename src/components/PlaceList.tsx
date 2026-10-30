@@ -1,14 +1,15 @@
-import type { Place } from '../types';
+import type { Place, Tri } from '../types';
 import type { Evaluation } from '../data/criteria';
 import { categoryOf, colorOf } from '../data/categories';
 import { formatDistance } from '../lib/geo';
 import { CriteriaBadges } from './CriteriaBadges';
+import { PlaceThumb } from './PlaceThumb';
 
 export interface ListItem {
   place: Place;
   ev: Evaluation;
   dist: number;
-  open: 'yes' | 'no' | 'unknown' | 'na';
+  open: Tri;
 }
 
 interface Props {
@@ -19,32 +20,41 @@ interface Props {
 
 const PAGE = 60;
 
+/** Anteil der bestätigten Kriterien (nur die, die für die Kategorie zählen), z. B. 3 von 4 → 75 % */
+function matchPercent(ev: Evaluation): number | undefined {
+  const relevant = Object.values(ev.results).filter((r) => r !== 'na');
+  if (!relevant.length) return undefined;
+  return Math.round((relevant.filter((r) => r === 'yes').length / relevant.length) * 100);
+}
+
 export function PlaceList({ items, selectedId, onSelect }: Props) {
   if (!items.length) return null;
   return (
-    <ul className="place-list">
+    <ul className="place-list stack">
       {items.slice(0, PAGE).map(({ place, ev, dist, open }) => {
         const cat = categoryOf(place.categoryId);
+        const match = matchPercent(ev);
+        const showBadges = ev.level === 'partial';
         return (
           <li key={place.id}>
-            <button className={`place-item ${place.id === selectedId ? 'selected' : ''} ${ev.level}`} onClick={() => onSelect(place)}>
-              <span className="place-emoji" style={{ background: colorOf(place.categoryId) }} aria-hidden>
-                {cat.emoji}
-              </span>
-              <span className="place-main">
-                <span className="place-name">{place.name}</span>
+            <button className={`place-card row-card level-${ev.level} ${place.id === selectedId ? 'selected' : ''}`} onClick={() => onSelect(place)}>
+              <PlaceThumb place={place} />
+              <span className="place-body">
+                <span className="place-title">{place.name}</span>
                 <span className="place-meta">
-                  {cat.label} · {formatDistance(dist)}
-                  {open === 'yes' && <span className="open-yes"> · geöffnet</span>}
-                  {open === 'no' && <span className="open-no"> · geschlossen</span>}
+                  <span style={{ color: colorOf(place.categoryId) }}>{cat.label}</span>
+                  <span>{formatDistance(dist)}</span>
+                  {open === 'yes' && <span className="open-yes">geöffnet</span>}
+                  {open === 'no' && <span className="open-no">geschlossen</span>}
                 </span>
-                <CriteriaBadges results={ev.results} compact />
+                {showBadges && <CriteriaBadges results={ev.results} compact />}
               </span>
+              {match !== undefined && <span className="match">{match} %</span>}
             </button>
           </li>
         );
       })}
-      {items.length > PAGE && <li className="list-more">+ {items.length - PAGE} weitere auf der Karte</li>}
+      {items.length > PAGE && <li className="footnote list-more">+ {items.length - PAGE} weitere auf der Karte</li>}
     </ul>
   );
 }

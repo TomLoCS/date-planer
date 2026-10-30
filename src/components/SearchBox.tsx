@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { LatLon } from '../types';
 import { searchPlaces, type GeoResult } from '../services/geocode';
+import { Icon } from './Icon';
 
 interface Props {
   near: LatLon;
@@ -47,29 +48,31 @@ export function SearchBox({ near, locating, onPick, onLocate }: Props) {
 
   return (
     <div className="searchbox">
-      <div className="searchbox-row">
-        <input
-          type="search"
-          placeholder="Stadt, Viertel oder Adresse …"
-          value={query}
-          onChange={(e) => {
-            setQuery(e.target.value);
-            setOpen(true);
-          }}
-          onFocus={() => setOpen(true)}
-          onBlur={() => setTimeout(() => setOpen(false), 150)}
-          onKeyDown={(e) => {
-            if (!results.length) return;
-            if (e.key === 'ArrowDown') setActive((a) => Math.min(a + 1, results.length - 1));
-            else if (e.key === 'ArrowUp') setActive((a) => Math.max(a - 1, 0));
-            else if (e.key === 'Enter') pick(results[active]);
-            else return;
-            e.preventDefault();
-          }}
-          aria-label="Ort suchen"
-        />
-        <button className="icon-btn" onClick={onLocate} title="Meinen Standort verwenden" disabled={locating}>
-          {locating ? '…' : '📍'}
+      <div className="row">
+        <div className="search">
+          <input
+            type="search"
+            placeholder="Ort oder Stadtteil suchen"
+            value={query}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setOpen(true);
+            }}
+            onFocus={() => setOpen(true)}
+            onBlur={() => setTimeout(() => setOpen(false), 150)}
+            onKeyDown={(e) => {
+              if (!results.length) return;
+              if (e.key === 'ArrowDown') setActive((a) => Math.min(a + 1, results.length - 1));
+              else if (e.key === 'ArrowUp') setActive((a) => Math.max(a - 1, 0));
+              else if (e.key === 'Enter') pick(results[active]);
+              else return;
+              e.preventDefault();
+            }}
+            aria-label="Ort suchen"
+          />
+        </div>
+        <button className="btn-icon" onClick={onLocate} title="Meinen Standort verwenden" aria-label="Meinen Standort verwenden" disabled={locating}>
+          {locating ? '…' : <Icon name="location" />}
         </button>
       </div>
       {open && results.length > 0 && (

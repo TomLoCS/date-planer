@@ -9,7 +9,12 @@ import { boundsForRadius, circlePolygon } from '../lib/geo';
 // OpenFreeMap: kostenlose Vektor-Karten ohne API-Key und ohne Limit.
 const STYLE_LIGHT = 'https://tiles.openfreemap.org/styles/positron';
 const STYLE_DARK = 'https://tiles.openfreemap.org/styles/dark';
-const ACCENT = '#e5484d';
+/** Ebenen, die in der Akzentfarbe (Aktivität = Blau, Date = Rosé) gezeichnet werden */
+const ACCENT_PAINT: [layer: string, property: 'fill-color' | 'line-color'][] = [
+  ['radius-fill', 'fill-color'],
+  ['radius-line', 'line-color'],
+  ['plan-line', 'line-color'],
+];
 
 // Vite bündelt maplibre vor; der Worker muss daher explizit als eigene Datei angegeben werden.
 setWorkerUrl(workerUrl);
@@ -35,13 +40,15 @@ interface Props {
   flyTo?: FlyTarget;
   onSelect: (place: Place) => void;
   onUserMove: (center: LatLon) => void;
+  /** Akzentfarbe aus dem Stylesheet (wechselt mit dem Date-Modus) */
+  accent: string;
   /** zusätzlicher Quellen-Hinweis unten rechts auf der Karte (z. B. „Powered by Geoapify") */
   attribution?: string;
 }
 
 const emptyFC: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] };
 
-export function MapView({ center, radius, places, selectedId, planStops, flyTo, onSelect, onUserMove, attribution }: Props) {
+export function MapView({ center, radius, places, selectedId, planStops, flyTo, onSelect, onUserMove, accent, attribution }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const [ready, setReady] = useState(false);
@@ -77,17 +84,17 @@ export function MapView({ center, radius, places, selectedId, planStops, flyTo, 
 
     map.on('load', () => {
       map.addSource('radius', { type: 'geojson', data: emptyFC });
-      map.addLayer({ id: 'radius-fill', type: 'fill', source: 'radius', paint: { 'fill-color': ACCENT, 'fill-opacity': 0.035 } });
+      map.addLayer({ id: 'radius-fill', type: 'fill', source: 'radius', paint: { 'fill-opacity': 0.04 } });
       map.addLayer({
         id: 'radius-line', type: 'line', source: 'radius',
-        paint: { 'line-color': ACCENT, 'line-width': 1.5, 'line-dasharray': [3, 2], 'line-opacity': 0.55 },
+        paint: { 'line-width': 1.5, 'line-dasharray': [3, 2], 'line-opacity': 0.6 },
       });
 
       map.addSource('plan', { type: 'geojson', data: emptyFC });
       map.addLayer({
         id: 'plan-line', type: 'line', source: 'plan',
         layout: { 'line-cap': 'round', 'line-join': 'round' },
-        paint: { 'line-color': ACCENT, 'line-width': 3, 'line-dasharray': [1.2, 1.6] },
+        paint: { 'line-width': 3, 'line-dasharray': [1.2, 1.6] },
       });
 
       map.addSource('places', { type: 'geojson', data: emptyFC });
@@ -106,6 +113,10 @@ export function MapView({ center, radius, places, selectedId, planStops, flyTo, 
           'circle-stroke-opacity': ['case', ['get', 'partial'], 0.5, 1],
         },
       });
+      // Quellen-Hinweis zugeklappt starten (ⓘ-Knopf) – die Quellen stehen zusätzlich unten in der Seitenleiste
+      const attrib = map.getContainer().querySelector('.maplibregl-ctrl-attrib');
+      attrib?.classList.remove('maplibregl-compact-show');
+      attrib?.removeAttribute('open');
       setReady(true);
     });
 
@@ -161,6 +172,13 @@ export function MapView({ center, radius, places, selectedId, planStops, flyTo, 
     }));
     (mapRef.current?.getSource('places') as GeoJSONSource | undefined)?.setData({ type: 'FeatureCollection', features });
   }, [ready, places]);
+
+  // Akzentfarbe (beim Start und beim Wechsel Aktivität ↔ Date)
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!ready || !map) return;
+    for (const [layer, property] of ACCENT_PAINT) map.setPaintProperty(layer, property, accent);
+  }, [ready, accent]);
 
   // Auswahl hervorheben
   useEffect(() => {
@@ -218,12 +236,12 @@ export function MapView({ center, radius, places, selectedId, planStops, flyTo, 
       map.fitBounds(boundsForRadius(flyTo, flyTo.radius), { padding: 24, duration: 1200 });
       return;
     }
-    // Auf dem Desktop liegt rechts die Detail-Karte (360 px) – Ort in die freie Fläche daneben setzen
+    // Auf dem Desktop liegt rechts die Detail-Karte (380 px) – Ort in die freie Fläche daneben setzen
     const wide = map.getContainer().clientWidth > 760;
     map.flyTo({
       center: [flyTo.lon, flyTo.lat],
       zoom: flyTo.zoom ?? Math.max(map.getZoom(), 15),
-      padding: { top: 0, bottom: 0, left: 0, right: wide ? 380 : 0 },
+      padding: { top: 0, bottom: 0, left: 0, right: wide ? 400 : 0 },
       essential: true,
       speed: 1.6,
     });

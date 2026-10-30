@@ -2,6 +2,7 @@ import type { Place, Plan, PlanStop, SavedPlan } from '../types';
 import { categoryOf, colorOf } from '../data/categories';
 import { formatDistance } from '../lib/geo';
 import { planDistance, planRouteUrl } from '../lib/share';
+import { Icon } from './Icon';
 
 interface Props {
   plan: Plan;
@@ -27,29 +28,41 @@ export function PlanPanel({ plan, savedPlans, onChange, onSelect, onShare, onCal
   };
 
   return (
-    <div className="plan">
-      <div className="plan-head">
-        <input
-          className="plan-title"
-          value={plan.title}
-          placeholder="Name für euer Date …"
-          onChange={(e) => onChange({ ...plan, title: e.target.value })}
-          aria-label="Titel des Plans"
-        />
-        <input type="date" value={plan.date} onChange={(e) => onChange({ ...plan, date: e.target.value })} aria-label="Datum" />
-      </div>
+    <div className="plan stack-lg">
+      <ul className="list">
+        <li className="list-row">
+          <input
+            className="plan-title"
+            value={plan.title}
+            placeholder="Name für euer Date …"
+            onChange={(e) => onChange({ ...plan, title: e.target.value })}
+            aria-label="Titel des Plans"
+          />
+        </li>
+        <li className="list-row">
+          <span>Datum</span>
+          <input className="plan-date" type="date" value={plan.date} onChange={(e) => onChange({ ...plan, date: e.target.value })} aria-label="Datum" />
+        </li>
+      </ul>
 
       {stops.length === 0 ? (
-        <div className="empty">
-          <p>Noch keine Stopps.</p>
-          <p className="hint">Wähle Orte auf der Karte und tippe „＋ Zum Plan" – oder lass dich mit 🎲 überraschen.</p>
-          <button className="btn primary" onClick={onDiscover}>
+        <div className="empty stack">
+          <p className="headline">Noch keine Stopps</p>
+          <p className="subhead">Wähle Orte auf der Karte und tippe „Zum Plan" – oder lass dich mit dem Würfel überraschen.</p>
+          <button className="btn btn-primary" onClick={onDiscover}>
             Orte entdecken
           </button>
         </div>
       ) : (
-        <>
-          <ol className="stops">
+        <section className="stack">
+          <div className="row section-head">
+            <h2 className="headline">Ablauf</h2>
+            <span className="footnote">
+              {stops.length} {stops.length === 1 ? 'Stopp' : 'Stopps'}
+              {stops.length > 1 && ` · ${formatDistance(planDistance(stops))} Luftlinie`}
+            </span>
+          </div>
+          <ol className="list stops">
             {stops.map((s, i) => {
               const cat = categoryOf(s.place.categoryId);
               return (
@@ -58,8 +71,8 @@ export function PlanPanel({ plan, savedPlans, onChange, onSelect, onShare, onCal
                     {i + 1}
                   </span>
                   <div className="stop-body">
-                    <div className="stop-row">
-                      <input type="time" value={s.time} onChange={(e) => update(s.uid, { time: e.target.value })} aria-label="Uhrzeit" />
+                    <div className="row">
+                      <input className="stop-time" type="time" value={s.time} onChange={(e) => update(s.uid, { time: e.target.value })} aria-label="Uhrzeit" />
                       <button className="stop-name" onClick={() => onSelect(s.place)}>
                         {cat.emoji} {s.place.name}
                       </button>
@@ -67,65 +80,65 @@ export function PlanPanel({ plan, savedPlans, onChange, onSelect, onShare, onCal
                     <input
                       className="stop-note"
                       value={s.note}
-                      placeholder="Notiz (z. B. Tisch reserviert)"
+                      placeholder="Notiz, z. B. Tisch reserviert"
                       onChange={(e) => update(s.uid, { note: e.target.value })}
                       aria-label="Notiz"
                     />
-                  </div>
-                  <div className="stop-tools">
-                    <button className="icon-btn sm" disabled={i === 0} onClick={() => move(i, -1)} aria-label="Nach oben">
-                      ↑
-                    </button>
-                    <button className="icon-btn sm" disabled={i === stops.length - 1} onClick={() => move(i, 1)} aria-label="Nach unten">
-                      ↓
-                    </button>
-                    <button className="icon-btn sm" onClick={() => setStops(stops.filter((x) => x.uid !== s.uid))} aria-label="Entfernen">
-                      ✕
-                    </button>
+                    <div className="row stop-tools">
+                      <button className="btn-icon sm" disabled={i === 0} onClick={() => move(i, -1)} aria-label="Nach oben">
+                        <Icon name="up" size={16} />
+                      </button>
+                      <button className="btn-icon sm" disabled={i === stops.length - 1} onClick={() => move(i, 1)} aria-label="Nach unten">
+                        <Icon name="down" size={16} />
+                      </button>
+                      <button className="btn-icon sm" onClick={() => setStops(stops.filter((x) => x.uid !== s.uid))} aria-label="Entfernen">
+                        <Icon name="trash" size={16} />
+                      </button>
+                    </div>
                   </div>
                 </li>
               );
             })}
           </ol>
-          <p className="plan-summary">
-            {stops.length} {stops.length === 1 ? 'Stopp' : 'Stopps'}
-            {stops.length > 1 && ` · ${formatDistance(planDistance(stops))} Luftlinie`}
-          </p>
-          <div className="plan-actions">
-            <a className="btn primary" href={planRouteUrl(stops)} target="_blank" rel="noreferrer">
-              🧭 Route
-            </a>
-            <button className="btn" onClick={onShare}>
-              🔗 Teilen
+
+          <a className="btn btn-primary btn-lg" href={planRouteUrl(stops)} target="_blank" rel="noreferrer">
+            <Icon name="route" /> Route starten
+          </a>
+          <div className="row wrap plan-actions">
+            <button className="btn btn-secondary btn-sm" onClick={onShare}>
+              <Icon name="share" /> Teilen
             </button>
-            <button className="btn" onClick={onCalendar}>
-              📅 Kalender
+            <button className="btn btn-secondary btn-sm" onClick={onCalendar}>
+              <Icon name="calendar" /> Kalender
             </button>
-            <button className="btn" onClick={onSave}>
-              💾 Speichern
+            <button className="btn btn-secondary btn-sm" onClick={onSave}>
+              <Icon name="save" /> Speichern
             </button>
-            <button className="btn ghost" onClick={() => onChange({ title: '', date: plan.date, stops: [] })}>
+            <button className="btn btn-plain btn-sm" onClick={() => onChange({ title: '', date: plan.date, stops: [] })}>
               Leeren
             </button>
           </div>
-        </>
+        </section>
       )}
 
       {savedPlans.length > 0 && (
-        <section className="saved">
-          <h3>Gespeicherte Pläne</h3>
-          <ul>
+        <section className="stack">
+          <h2 className="headline">Gespeicherte Pläne</h2>
+          <ul className="list">
             {savedPlans.map((p) => (
-              <li key={p.id}>
-                <button className="saved-load" onClick={() => onLoad(p)}>
-                  <strong>{p.title || 'Ohne Titel'}</strong>
-                  <span>
-                    {p.date ? new Date(p.date).toLocaleDateString('de-DE') + ' · ' : ''}
-                    {p.stops.length} Stopps
+              <li key={p.id} className="saved-row">
+                <button className="list-row" onClick={() => onLoad(p)}>
+                  <span className="list-label">
+                    {p.title || 'Ohne Titel'}
+                    <span className="footnote">
+                      {p.date ? new Date(p.date).toLocaleDateString('de-DE') + ' · ' : ''}
+                      {p.stops.length} Stopps
+                    </span>
                   </span>
+                  <span className="value chevron" />
                 </button>
-                <button className="icon-btn sm" onClick={() => onDeleteSaved(p.id)} aria-label="Gespeicherten Plan löschen">
-                  ✕
+                <button className="btn-icon sm saved-delete" onClick={() => onDeleteSaved(p.id)} aria-label="Gespeicherten Plan löschen">
+                  <Icon name="trash" size={16} />
                 </button>
               </li>
             ))}

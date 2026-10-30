@@ -17,6 +17,7 @@ Das Gedächtnis für dieses Projekt liegt im Obsidian-Vault des Users:
 - Daten: Einstieg `src/services/places.ts` → Geoapify Places API (OSM-Daten, Key in `.env.local` / GitHub-Secret `GEOAPIFY_KEY`), Notlösung Overpass (`overpass.ts`). „Am Wasser" aus OpenFreeMap-Vektorkacheln (`water.ts`). Karte OpenFreeMap, Suche Photon.
 - Kein Backend; Zustand in localStorage (`dp.*`-Keys), Pläne werden im URL-Hash `#plan=` geteilt.
 - `?demo` in der URL lädt fiktive Testorte (`src/dev/demoData.ts`).
+- Design: `src/styles/planner-ui.css` = Design-System „Spotly UI" (aus Eriks Stylesheet-PDF; Klassen wie `.btn-primary`, `.chip[aria-pressed]`, `.list-row`, `.place-card`). `app.css` nur Layout mit diesen Variablen. Date-Modus über `<html data-mode="date">`.
 - Prüfen: `npm run typecheck`, `npm run build`. Dev-Server: `.claude/launch.json` → `date-planer`.
 - Deploy: Push auf `main` → GitHub Actions → GitHub Pages: https://tomlocs.github.io/date-planer/ (Repo `TomLoCS/date-planer`, öffentlich).
 - Der Ordner liegt auf einem NAS (`\\NasserRamussler\Main\...`); das Terminal-Panel kann dort nicht starten → Bash nutzen.

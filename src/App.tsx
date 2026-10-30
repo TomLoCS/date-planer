@@ -17,11 +17,15 @@ import { PlaceList, type ListItem } from './components/PlaceList';
 import { PlaceDetail } from './components/PlaceDetail';
 import { PlanPanel } from './components/PlanPanel';
 import { FavoritesPanel } from './components/FavoritesPanel';
+import { Icon, type IconName } from './components/Icon';
 
 const DEFAULT_CENTER: LatLon = { lat: 52.52, lon: 13.405 };
 const EMPTY_PLAN: Plan = { title: '', date: '', stops: [] };
 
 type Tab = 'discover' | 'plan' | 'favorites';
+/** Aktivität = blauer Akzent, Date = Rosé (siehe planner-ui.css) */
+type Mode = 'activity' | 'date';
+type Sort = 'best' | 'near';
 
 function localDateTime(d: Date): string {
   const pad = (n: number) => String(n).padStart(2, '0');
@@ -42,6 +46,8 @@ export default function App() {
   const [categoryIds, setCategoryIds] = useLocalStorage<string[]>('dp.categories', DEFAULT_CATEGORIES);
   const [criteria, setCriteria] = useLocalStorage<CriterionId[]>('dp.criteria', []);
   const [showUnknown, setShowUnknown] = useLocalStorage('dp.showUnknown', false);
+  const [mode, setMode] = useLocalStorage<Mode>('dp.mode', 'activity');
+  const [sort, setSort] = useState<Sort>('best');
   const [whenMode, setWhenMode] = useState<'now' | 'custom'>('now');
   const [whenCustom, setWhenCustom] = useState(tonightAt19);
   const [now, setNow] = useState(() => new Date());
@@ -67,6 +73,7 @@ export default function App() {
   const [locating, setLocating] = useState(false);
   const [suggestion, setSuggestion] = useState<Place[] | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [accent, setAccent] = useState('#0071e3');
 
   const withWater = criteria.includes('water');
   const categoryKey = categoryIds.join(',');
@@ -81,6 +88,14 @@ export default function App() {
       window.removeEventListener('hashchange', onHash);
     };
   }, []);
+
+  // Modus an <html data-mode> hängen → CSS tauscht die Akzentfarbe; die Karte bekommt sie als Wert
+  useEffect(() => {
+    const root = document.documentElement;
+    if (mode === 'date') root.dataset.mode = 'date';
+    else delete root.dataset.mode;
+    setAccent(getComputedStyle(root).getPropertyValue('--accent').trim() || '#0071e3');
+  }, [mode]);
 
   useEffect(() => {
     if (!toast) return;
@@ -167,8 +182,8 @@ export default function App() {
     () =>
       evaluated
         .filter((x) => x.ev.level === 'match' || (showUnknown && x.ev.level === 'partial'))
-        .sort((a, b) => b.ev.score - a.ev.score || a.dist - b.dist),
-    [evaluated, showUnknown],
+        .sort((a, b) => (sort === 'best' ? b.ev.score - a.ev.score : 0) || a.dist - b.dist),
+    [evaluated, showUnknown, sort],
   );
 
   const mapPlaces = useMemo(() => visible.map((x) => ({ place: x.place, partial: x.ev.level === 'partial' })), [visible]);
@@ -315,57 +330,69 @@ export default function App() {
   };
 
   const showSearchHere = mapCenter !== null && distance(mapCenter, center) > radius * 0.25;
-  const activeCriteriaLabels = criteria.map((c) => CRITERION_BY_ID[c].emoji).join(' ');
+  const criteriaText = criteria.map((c) => CRITERION_BY_ID[c].label).join(' · ');
+  const today = now.toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' });
+  const tabs: { id: Tab; label: string; icon: IconName; count?: number }[] = [
+    { id: 'discover', label: 'Entdecken', icon: 'search' },
+    { id: 'plan', label: 'Pläne', icon: 'calendar', count: plan.stops.length },
+    { id: 'favorites', label: 'Favoriten', icon: 'heart', count: favorites.length },
+  ];
 
   return (
     <div className="app">
       <aside className="sidebar">
-        <header className="brand">
-          <span className="logo" aria-hidden>
-            ♥
-          </span>
-          <div>
-            <h1>Date Planer</h1>
-            <p>Dates & Freizeit nach euren Kriterien</p>
+        <header className="nav side-nav">
+          <div className="nav-bar">
+            <span className="nav-title brand">
+              <span className="logo" aria-hidden>
+                ♥
+              </span>
+              Date Planer
+            </span>
           </div>
         </header>
 
-        {sharedPlan && (
-          <div className="banner">
-            <p>
-              <strong>Dir wurde ein Plan geschickt:</strong> {sharedPlan.title || 'Ohne Titel'} ({sharedPlan.stops.length} Stopps)
-            </p>
-            <div>
-              <button className="btn primary sm" onClick={acceptShared}>
-                Ansehen
-              </button>
-              <button className="btn ghost sm" onClick={dismissShared}>
-                Ignorieren
-              </button>
-            </div>
-          </div>
-        )}
-
-        <nav className="tabs" role="tablist">
-          <button role="tab" aria-selected={tab === 'discover'} className={tab === 'discover' ? 'on' : ''} onClick={() => setTab('discover')}>
-            Entdecken
-          </button>
-          <button role="tab" aria-selected={tab === 'plan'} className={tab === 'plan' ? 'on' : ''} onClick={() => setTab('plan')}>
-            Plan {plan.stops.length > 0 && <span className="pill">{plan.stops.length}</span>}
-          </button>
-          <button role="tab" aria-selected={tab === 'favorites'} className={tab === 'favorites' ? 'on' : ''} onClick={() => setTab('favorites')}>
-            Gemerkt {favorites.length > 0 && <span className="pill">{favorites.length}</span>}
-          </button>
-        </nav>
-
         <div className="tab-body" key={tab}>
-          {tab === 'discover' && (
-            <>
-              <SearchBox near={center} locating={locating} onPick={onPickLocation} onLocate={onLocate} />
-              <p className="where">
-                Suche um <strong>{centerLabel}</strong>
+          {sharedPlan && (
+            <div className="banner stack">
+              <p className="subhead">
+                <strong>Dir wurde ein Plan geschickt:</strong> {sharedPlan.title || 'Ohne Titel'} ({sharedPlan.stops.length} Stopps)
               </p>
-              {isDemoMode() && <p className="demo-note">🧪 Demo-Modus: fiktive Beispiel-Orte rund um Berlin-Mitte (URL ohne „?demo" öffnen für echte Daten)</p>}
+              <div className="row">
+                <button className="btn btn-primary btn-sm" onClick={acceptShared}>
+                  Ansehen
+                </button>
+                <button className="btn btn-plain btn-sm" onClick={dismissShared}>
+                  Ignorieren
+                </button>
+              </div>
+            </div>
+          )}
+
+          {tab === 'discover' && (
+            <div className="stack-lg">
+              <header className="page-head">
+                <p className="eyebrow">{today}</p>
+                <h1 className="large-title">Was habt ihr vor?</h1>
+              </header>
+
+              <div className="segmented" role="radiogroup" aria-label="Modus">
+                <button role="radio" aria-checked={mode === 'activity'} onClick={() => setMode('activity')}>
+                  Aktivität
+                </button>
+                <button role="radio" aria-checked={mode === 'date'} onClick={() => setMode('date')}>
+                  Date
+                </button>
+              </div>
+
+              <div className="stack">
+                <SearchBox near={center} locating={locating} onPick={onPickLocation} onLocate={onLocate} />
+                <p className="footnote">
+                  Suche um <strong className="where">{centerLabel}</strong>
+                </p>
+                {isDemoMode() && <p className="demo-note footnote">Demo-Modus: fiktive Beispiel-Orte rund um Berlin-Mitte (URL ohne „?demo" öffnen für echte Daten)</p>}
+              </div>
+
               <FilterPanel
                 radius={radius}
                 onRadius={(r) => {
@@ -381,119 +408,159 @@ export default function App() {
                 onWhenMode={setWhenMode}
                 whenCustom={whenCustom}
                 onWhenCustom={setWhenCustom}
+                showUnknown={showUnknown}
+                onShowUnknown={setShowUnknown}
+                unknownCount={partialCount}
               />
 
-              <div className="results-head">
-                <div className="results-count">
-                  {loading || waterLoading ? (
-                    <span className="loading">{loading ? status : 'Prüfe, was am Wasser liegt …'}</span>
-                  ) : error ? null : !categoryIds.length ? (
-                    <span>Wähle oben mindestens eine Kategorie.</span>
-                  ) : (
-                    <span>
-                      <strong>{matchCount}</strong> {matchCount === 1 ? 'passender Ort' : 'passende Orte'} {activeCriteriaLabels}
-                    </span>
-                  )}
-                </div>
-                <button className="btn sm" onClick={rollSurprise} disabled={loading || !visible.length} title="Zufälliges Date aus den Treffern">
-                  🎲 Überrasch mich
-                </button>
-              </div>
-
-              {error && (
-                <div className="error">
-                  <p>{error}</p>
-                  <button className="btn sm" onClick={() => setRetry((r) => r + 1)}>
-                    Nochmal versuchen
+              <section className="results stack">
+                <div className="results-head">
+                  <div>
+                    <h2 className="title-2">In deiner Nähe</h2>
+                    <p className="subhead" aria-live="polite">
+                      {loading || waterLoading ? (
+                        <span className="loading">{loading ? status : 'Prüfe, was am Wasser liegt …'}</span>
+                      ) : error ? (
+                        'Gerade keine Daten'
+                      ) : !categoryIds.length ? (
+                        'Wähle oben mindestens eine Kategorie.'
+                      ) : (
+                        <>
+                          {matchCount} {matchCount === 1 ? 'Ort' : 'Orte'} · bis {Math.round(radius / 1000)} km
+                          {criteriaText && ` · ${criteriaText}`}
+                        </>
+                      )}
+                    </p>
+                  </div>
+                  <button className="btn-icon" onClick={rollSurprise} disabled={loading || !visible.length} title="Überrasch mich: zufälliges Date aus den Treffern" aria-label="Überrasch mich">
+                    <Icon name="dice" />
                   </button>
                 </div>
-              )}
 
-              {!loading && !waterLoading && criteria.length > 0 && partialCount > 0 && (
-                <button className="unknown-toggle" onClick={() => setShowUnknown((v) => !v)}>
-                  {showUnknown
-                    ? `Orte ohne Angabe ausblenden (${partialCount})`
-                    : `+ ${partialCount} Orte ohne Angabe einblenden`}
-                  <span className="hint"> – in OpenStreetMap fehlt dort ein Kriterium</span>
-                </button>
-              )}
-
-              {suggestion && (
-                <div className="suggestion">
-                  <h3>🎲 Wie wär's damit?</h3>
-                  <ol>
-                    {suggestion.map((p, i) => (
-                      <li key={p.id}>
-                        <span className="sugg-time">{surpriseTimes(suggestion.length)[i]}</span>
-                        <button className="link" onClick={() => selectPlace(p)}>
-                          {categoryOf(p.categoryId).emoji} {p.name}
-                        </button>
-                      </li>
-                    ))}
-                  </ol>
-                  <div className="suggestion-actions">
-                    <button className="btn primary sm" onClick={applySuggestion}>
-                      Als Plan übernehmen
+                {visible.length > 1 && (
+                  <div className="row wrap">
+                    <button className="chip" aria-pressed={sort === 'best'} onClick={() => setSort('best')}>
+                      Beste Treffer
                     </button>
-                    <button className="btn sm" onClick={rollSurprise}>
-                      Nochmal würfeln
-                    </button>
-                    <button className="btn ghost sm" onClick={() => setSuggestion(null)}>
-                      ✕
+                    <button className="chip" aria-pressed={sort === 'near'} onClick={() => setSort('near')}>
+                      Nächste
                     </button>
                   </div>
-                </div>
-              )}
+                )}
 
-              {!loading && !waterLoading && !error && categoryIds.length > 0 && visible.length === 0 && (
-                <div className="empty">
-                  <p>Nichts gefunden, das sicher passt.</p>
-                  <p className="hint">Tipp: Umkreis vergrößern, mehr Kategorien wählen oder „Orte ohne Angabe" einblenden.</p>
-                </div>
-              )}
+                {error && (
+                  <div className="error stack">
+                    <p className="subhead">{error}</p>
+                    <button className="btn btn-secondary btn-sm" onClick={() => setRetry((r) => r + 1)}>
+                      Nochmal versuchen
+                    </button>
+                  </div>
+                )}
 
-              <PlaceList items={visible} selectedId={selected?.id} onSelect={(p) => selectPlace(p)} />
-            </>
+                {suggestion && (
+                  <div className="suggestion stack">
+                    <div className="row">
+                      <Icon name="dice" />
+                      <h3 className="headline">Wie wär's damit?</h3>
+                    </div>
+                    <ol className="list">
+                      {suggestion.map((p, i) => (
+                        <li key={p.id}>
+                          <button className="list-row" onClick={() => selectPlace(p)}>
+                            <span className="footnote sugg-time">{surpriseTimes(suggestion.length)[i]}</span>
+                            <span>
+                              {categoryOf(p.categoryId).emoji} {p.name}
+                            </span>
+                          </button>
+                        </li>
+                      ))}
+                    </ol>
+                    <div className="row wrap">
+                      <button className="btn btn-primary btn-sm" onClick={applySuggestion}>
+                        Als Plan übernehmen
+                      </button>
+                      <button className="btn btn-secondary btn-sm" onClick={rollSurprise}>
+                        Nochmal würfeln
+                      </button>
+                      <button className="btn btn-plain btn-sm" onClick={() => setSuggestion(null)}>
+                        Schließen
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {!loading && !waterLoading && !error && categoryIds.length > 0 && visible.length === 0 && (
+                  <div className="empty stack">
+                    <p className="headline">Nichts gefunden, das sicher passt</p>
+                    <p className="subhead">Tipp: Umkreis vergrößern, mehr Kategorien wählen oder „Auch Orte ohne Angabe" einschalten.</p>
+                  </div>
+                )}
+
+                <PlaceList items={visible} selectedId={selected?.id} onSelect={(p) => selectPlace(p)} />
+              </section>
+
+              <footer className="credits footnote">
+                Daten © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a>-Mitwirkende
+                {hasGeoapifyKey() && (
+                  <>
+                    {' '}
+                    via{' '}
+                    <a href="https://www.geoapify.com/" target="_blank" rel="noreferrer">
+                      Geoapify
+                    </a>
+                  </>
+                )}{' '}
+                · Karte{' '}
+                <a href="https://openfreemap.org" target="_blank" rel="noreferrer">OpenFreeMap</a> · Suche{' '}
+                <a href="https://photon.komoot.io" target="_blank" rel="noreferrer">Photon</a>
+              </footer>
+            </div>
           )}
 
           {tab === 'plan' && (
-            <PlanPanel
-              plan={plan}
-              savedPlans={savedPlans}
-              onChange={setPlan}
-              onSelect={(p) => selectPlace(p)}
-              onShare={sharePlan}
-              onCalendar={exportCalendar}
-              onSave={savePlan}
-              onLoad={(p) => {
-                setPlan({ title: p.title, date: p.date, stops: p.stops });
-                setToast('Plan geladen');
-              }}
-              onDeleteSaved={(id) => setSavedPlans((list) => list.filter((p) => p.id !== id))}
-              onDiscover={() => setTab('discover')}
-            />
+            <div className="stack-lg">
+              <header className="page-head">
+                <p className="eyebrow">{plan.date ? new Date(plan.date).toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' }) : 'Euer Date'}</p>
+                <h1 className="large-title">Pläne</h1>
+              </header>
+              <PlanPanel
+                plan={plan}
+                savedPlans={savedPlans}
+                onChange={setPlan}
+                onSelect={(p) => selectPlace(p)}
+                onShare={sharePlan}
+                onCalendar={exportCalendar}
+                onSave={savePlan}
+                onLoad={(p) => {
+                  setPlan({ title: p.title, date: p.date, stops: p.stops });
+                  setToast('Plan geladen');
+                }}
+                onDeleteSaved={(id) => setSavedPlans((list) => list.filter((p) => p.id !== id))}
+                onDiscover={() => setTab('discover')}
+              />
+            </div>
           )}
 
           {tab === 'favorites' && (
-            <FavoritesPanel favorites={favorites} onSelect={(p) => selectPlace(p)} onRemove={toggleFavorite} onAddToPlan={addToPlan} />
+            <div className="stack-lg">
+              <header className="page-head">
+                <p className="eyebrow">{favorites.length === 1 ? '1 Ort gemerkt' : `${favorites.length} Orte gemerkt`}</p>
+                <h1 className="large-title">Favoriten</h1>
+              </header>
+              <FavoritesPanel favorites={favorites} onSelect={(p) => selectPlace(p)} onRemove={toggleFavorite} onAddToPlan={addToPlan} />
+            </div>
           )}
         </div>
 
-        <footer className="credits">
-          Daten © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a>-Mitwirkende
-          {hasGeoapifyKey() && (
-            <>
-              {' '}
-              via{' '}
-              <a href="https://www.geoapify.com/" target="_blank" rel="noreferrer">
-                Geoapify
-              </a>
-            </>
-          )}{' '}
-          · Karte{' '}
-          <a href="https://openfreemap.org" target="_blank" rel="noreferrer">OpenFreeMap</a> · Suche{' '}
-          <a href="https://photon.komoot.io" target="_blank" rel="noreferrer">Photon</a>
-        </footer>
+        <nav className="tabbar" role="tablist">
+          {tabs.map((t) => (
+            <button key={t.id} className="tab" role="tab" aria-selected={tab === t.id} onClick={() => setTab(t.id)}>
+              <Icon name={t.icon} size={26} />
+              {t.label}
+              {!!t.count && <span className="tab-count">{t.count}</span>}
+            </button>
+          ))}
+        </nav>
       </aside>
 
       <main className="map-wrap">
@@ -501,6 +568,7 @@ export default function App() {
           center={center}
           radius={radius}
           places={mapPlaces}
+          accent={accent}
           attribution={hasGeoapifyKey() ? GEOAPIFY_ATTRIBUTION : undefined}
           selectedId={selected?.id}
           planStops={plan.stops}
@@ -509,11 +577,11 @@ export default function App() {
           onUserMove={setMapCenter}
         />
         {showSearchHere && (
-          <button className="search-here btn primary" onClick={searchHere}>
-            🔍 In diesem Bereich suchen
+          <button className="search-here btn btn-primary btn-sm" onClick={searchHere}>
+            <Icon name="search" /> In diesem Bereich suchen
           </button>
         )}
-        {loading && <div className="map-loading">{status === 'Suche Orte …' ? 'Lade Orte …' : status}</div>}
+        {loading && <div className="map-loading footnote">{status === 'Suche Orte …' ? 'Lade Orte …' : status}</div>}
         {selected && (
           <PlaceDetail
             key={selected.id}

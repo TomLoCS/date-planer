@@ -45,11 +45,11 @@ export function instagramOf(tags: OsmTags): string | undefined {
   return ig.startsWith('http') ? ig : `https://instagram.com/${ig.replace(/^@/, '')}`;
 }
 
-/** Bild aus `image` (direkter Link) oder `wikimedia_commons` (File:…) */
-export function imageOf(tags: OsmTags): string | undefined {
+/** Bild aus `image` (direkter Link) oder `wikimedia_commons` (File:…); `width` = Breite bei Commons-Bildern */
+export function imageOf(tags: OsmTags, width = 640): string | undefined {
   const commons = tags.wikimedia_commons;
   if (commons?.startsWith('File:')) {
-    return `https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(commons.slice(5))}?width=640`;
+    return `https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(commons.slice(5))}?width=${width}`;
   }
   const img = tags.image;
   if (img && /^https:\/\/.+\.(jpe?g|png|webp)$/i.test(img)) return img;
