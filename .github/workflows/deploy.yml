@@ -26,6 +26,9 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
+        env:
+          # Repo → Settings → Secrets → Actions. Fehlt das Secret, nutzt die App Overpass als Notlösung.
+          VITE_GEOAPIFY_KEY: ${{ secrets.GEOAPIFY_KEY }}
       - uses: actions/upload-pages-artifact@v4
         with:
           path: dist

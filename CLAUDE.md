@@ -14,7 +14,7 @@ Das Gedächtnis für dieses Projekt liegt im Obsidian-Vault des Users:
 
 ## Tech
 - React 19 + TypeScript 7 + Vite 8, MapLibre GL 6 (Worker per `setWorkerUrl` in `MapView.tsx` – nicht entfernen).
-- Daten: OSM über öffentliche Overpass-Server (Fallback-Liste in `src/services/overpass.ts`), Karte OpenFreeMap, Suche Photon.
+- Daten: Einstieg `src/services/places.ts` → Geoapify Places API (OSM-Daten, Key in `.env.local` / GitHub-Secret `GEOAPIFY_KEY`), Notlösung Overpass (`overpass.ts`). „Am Wasser" aus OpenFreeMap-Vektorkacheln (`water.ts`). Karte OpenFreeMap, Suche Photon.
 - Kein Backend; Zustand in localStorage (`dp.*`-Keys), Pläne werden im URL-Hash `#plan=` geteilt.
 - `?demo` in der URL lädt fiktive Testorte (`src/dev/demoData.ts`).
 - Prüfen: `npm run typecheck`, `npm run build`. Dev-Server: `.claude/launch.json` → `date-planer`.

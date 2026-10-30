@@ -35,11 +35,13 @@ interface Props {
   flyTo?: FlyTarget;
   onSelect: (place: Place) => void;
   onUserMove: (center: LatLon) => void;
+  /** zusätzlicher Quellen-Hinweis unten rechts auf der Karte (z. B. „Powered by Geoapify") */
+  attribution?: string;
 }
 
 const emptyFC: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] };
 
-export function MapView({ center, radius, places, selectedId, planStops, flyTo, onSelect, onUserMove }: Props) {
+export function MapView({ center, radius, places, selectedId, planStops, flyTo, onSelect, onUserMove, attribution }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const [ready, setReady] = useState(false);
@@ -64,7 +66,7 @@ export function MapView({ center, radius, places, selectedId, planStops, flyTo, 
         style: dark ? STYLE_DARK : STYLE_LIGHT,
         bounds: boundsForRadius(center, radius),
         fitBoundsOptions: { padding: 24 },
-        attributionControl: { compact: true },
+        attributionControl: { compact: true, customAttribution: attribution },
       });
     } catch (e) {
       setError(`Karte konnte nicht geladen werden: ${(e as Error).message}`);

@@ -1,11 +1,10 @@
-import type { LatLon, Place } from '../types';
+import type { Place, SearchParams } from '../types';
 import { CATEGORY_BY_ID, condsToOverpass, matchCategory, type Category } from '../data/categories';
-import { distance } from '../lib/geo';
 
 /**
- * Öffentliche Overpass-Server (kostenlos, Fair Use). Fällt einer aus oder ist überlastet,
- * wird der nächste probiert. Der zuletzt erfolgreiche Server wird beim nächsten Mal zuerst gefragt.
- * Später ggf. durch einen eigenen Server / eigenen POI-Export ersetzen (siehe Obsidian: Tech-Stack & Kosten).
+ * Notlösung, wenn Geoapify nicht geht (kein Key, Tageslimit): direkt die öffentlichen Overpass-Server fragen.
+ * Kostenlos und ohne Key, aber oft langsam/überlastet. Fällt einer aus, wird der nächste probiert;
+ * der zuletzt erfolgreiche Server wird beim nächsten Mal zuerst gefragt.
  */
 const ENDPOINTS = [
   'https://overpass-api.de/api/interpreter',
@@ -35,18 +34,7 @@ function rememberEndpoint(endpoint: string) {
   }
 }
 
-const MAX_PLACES = 800;
-const NEAR_WATER_M = 120;
-
-export interface SearchParams {
-  center: LatLon;
-  radius: number;
-  categoryIds: string[];
-  /** Nähe zu Wasser mit abfragen (teurer, nur wenn das Kriterium aktiv ist) */
-  withWater: boolean;
-}
-
-interface OverpassElement {
+export interface OverpassElement {
   type: 'node' | 'way' | 'relation';
   id: number;
   lat?: number;
@@ -55,9 +43,8 @@ interface OverpassElement {
   tags?: Record<string, string>;
 }
 
-export function buildQuery({ center, radius, categoryIds, withWater }: SearchParams): string {
-  const at = `${center.lat.toFixed(5)},${center.lon.toFixed(5)}`;
-  const around = `(around:${radius},${at})`;
+export function buildQuery({ center, radius, categoryIds }: SearchParams): string {
+  const around = `(around:${radius},${center.lat.toFixed(5)},${center.lon.toFixed(5)})`;
   const lines: string[] = [];
   for (const id of categoryIds) {
     const cat = CATEGORY_BY_ID[id];
@@ -67,48 +54,15 @@ export function buildQuery({ center, radius, categoryIds, withWater }: SearchPar
       lines.push(`  nwr${condsToOverpass(conds)}${name}["access"!~"^(private|no)$"]${around};`);
     }
   }
-
-  let q = `[out:json][timeout:25];\n(\n${lines.join('\n')}\n)->.all;\n.all out center tags;`;
-
-  if (withWater) {
-    // Gewässer etwas über den Suchradius hinaus holen, damit Orte am Rand auch geprüft werden.
-    const wa = `(around:${radius + 200},${at})`;
-    q += `
-(
-  way["natural"="water"]["water"!~"^(wastewater|basin)$"]${wa};
-  relation["natural"="water"]["water"!~"^(wastewater|basin)$"]${wa};
-  way["waterway"~"^(river|canal)$"]${wa};
-  way["natural"="coastline"]${wa};
-)->.wtmp;
-(.wtmp; way(r.wtmp);)->.water;
-nwr.all(around.water:${NEAR_WATER_M})->.near;
-.near out ids;`;
-  }
-  return q;
+  return `[out:json][timeout:25];\n(\n${lines.join('\n')}\n);\nout center tags;`;
 }
 
-const cache = new Map<string, Place[]>();
-
-/** `?demo` in der URL → fiktive Beispiel-Orte statt Overpass (zum Testen ohne Server) */
-export function isDemoMode(): boolean {
-  return new URLSearchParams(location.search).has('demo');
-}
-
-export async function fetchPlaces(
+export async function fetchOverpass(
   params: SearchParams,
   signal?: AbortSignal,
   onAttempt?: (attempt: number, total: number) => void,
 ): Promise<Place[]> {
-  if (params.categoryIds.length === 0) return [];
-  if (isDemoMode()) {
-    const { DEMO_ELEMENTS } = await import('../dev/demoData');
-    const all = parse(DEMO_ELEMENTS as unknown as OverpassElement[], params);
-    return all.filter((p) => distance(params.center, p) <= params.radius);
-  }
   const query = buildQuery(params);
-  const cached = cache.get(query);
-  if (cached) return cached;
-
   const endpoints = orderedEndpoints();
   let lastError = '';
   for (const [i, endpoint] of endpoints.entries()) {
@@ -129,10 +83,8 @@ export async function fetchPlaces(
         lastError = `${new URL(endpoint).host}: ${json.remark}`;
         continue;
       }
-      const places = parse(json.elements, params);
-      cache.set(query, places);
       rememberEndpoint(endpoint);
-      return places;
+      return parseOverpass(json.elements, params.categoryIds);
     } catch (err) {
       if (signal?.aborted) throw err;
       lastError = `${new URL(endpoint).host}: ${timeout.aborted ? 'keine Antwort' : (err as Error).message}`;
@@ -141,14 +93,15 @@ export async function fetchPlaces(
   throw new Error(`Die kostenlosen Kartenserver sind gerade ausgelastet. Bitte gleich nochmal versuchen. (${lastError})`);
 }
 
-function parse(elements: OverpassElement[], params: SearchParams): Place[] {
-  const candidates: Category[] = params.categoryIds.map((id) => CATEGORY_BY_ID[id]).filter(Boolean);
+/** Overpass-Elemente → Orte. Wird auch für die Demo-Daten benutzt. */
+export function parseOverpass(elements: OverpassElement[], categoryIds: string[]): Place[] {
+  const candidates: Category[] = categoryIds.map((id) => CATEGORY_BY_ID[id]).filter(Boolean);
   const nearWater = new Set<string>();
   const byId = new Map<string, Place>();
 
   for (const el of elements) {
     const id = `${el.type}/${el.id}`;
-    // Elemente ohne Tags kommen aus der zweiten Ausgabe (".near out ids") → liegen am Wasser.
+    // Elemente ohne Tags = Liste „liegt am Wasser" (nur in den Demo-Daten)
     if (!el.tags) {
       nearWater.add(id);
       continue;
@@ -168,25 +121,7 @@ function parse(elements: OverpassElement[], params: SearchParams): Place[] {
     });
   }
 
-  const places = dedupe([...byId.values()]);
-  if (params.withWater) for (const p of places) p.nearWater = nearWater.has(p.id);
-
-  return places
-    .sort((a, b) => distance(params.center, a) - distance(params.center, b))
-    .slice(0, MAX_PLACES);
-}
-
-/** Gleicher Name + gleiche Kategorie innerhalb von 80 m = derselbe Ort (z. B. Punkt + Gebäude). */
-function dedupe(places: Place[]): Place[] {
-  const seen = new Map<string, Place[]>();
-  const out: Place[] = [];
-  for (const p of places) {
-    const key = `${p.categoryId}|${p.name.toLowerCase()}`;
-    const same = seen.get(key) ?? [];
-    if (same.some((q) => distance(p, q) < 80)) continue;
-    same.push(p);
-    seen.set(key, same);
-    out.push(p);
-  }
-  return out;
+  const places = [...byId.values()];
+  for (const p of places) if (nearWater.has(p.id)) p.nearWater = true;
+  return places;
 }

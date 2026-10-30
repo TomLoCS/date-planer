@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { CriterionId, GroupId, LatLon, Place, Plan, SavedPlan } from './types';
 import { CATEGORIES, DEFAULT_CATEGORIES, categoryOf } from './data/categories';
 import { CRITERION_BY_ID, evaluatePlace, type CriterionContext } from './data/criteria';
-import { fetchPlaces, isDemoMode } from './services/overpass';
+import { checkNearWater, fetchPlaces, isDemoMode } from './services/places';
+import { GEOAPIFY_ATTRIBUTION, hasGeoapifyKey } from './services/geoapify';
 import { reverseGeocode, type GeoResult } from './services/geocode';
 import { distance } from './lib/geo';
 import { useLocalStorage } from './lib/storage';
@@ -52,9 +53,11 @@ export default function App() {
   const [sharedPlan, setSharedPlan] = useState<Plan | null>(() => planFromHash(location.hash));
 
   // --- Ergebnisse & UI ---
-  const [places, setPlaces] = useState<Place[]>([]);
+  const [fetched, setFetched] = useState<Place[]>([]);
   const [loading, setLoading] = useState(false);
-  const [attempt, setAttempt] = useState(1);
+  const [status, setStatus] = useState('Suche Orte …');
+  const [nearWater, setNearWater] = useState<Set<string> | null>(null);
+  const [waterLoading, setWaterLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [retry, setRetry] = useState(0);
   const [selected, setSelected] = useState<Place | null>(null);
@@ -85,21 +88,21 @@ export default function App() {
     return () => clearTimeout(t);
   }, [toast]);
 
-  // Orte laden – mit kurzer Pause, damit schnelles Klicken nicht zig Anfragen auslöst (Fair Use)
+  // Orte laden – mit kurzer Pause, damit schnelles Klicken nicht zig Anfragen auslöst (spart Credits)
   useEffect(() => {
     const ctrl = new AbortController();
     setError(null);
     if (!categoryIds.length) {
-      setPlaces([]);
+      setFetched([]);
       setLoading(false);
       return;
     }
     setLoading(true);
-    setAttempt(1);
+    setStatus('Suche Orte …');
     const timer = setTimeout(() => {
-      fetchPlaces({ center, radius, categoryIds, withWater }, ctrl.signal, (a) => setAttempt(a))
+      fetchPlaces({ center, radius, categoryIds }, ctrl.signal, setStatus)
         .then((res) => {
-          setPlaces(res);
+          setFetched(res);
           setLoading(false);
         })
         .catch((e: Error) => {
@@ -114,10 +117,37 @@ export default function App() {
     };
     // categoryKey statt categoryIds, damit gleiche Auswahl keine neue Anfrage auslöst
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [center.lat, center.lon, radius, categoryKey, withWater, retry]);
+  }, [center.lat, center.lon, radius, categoryKey, retry]);
+
+  // „Am Wasser" separat prüfen (aus den Kartenkacheln) – das Kriterium löst so keine neue Orts-Suche aus
+  useEffect(() => {
+    setNearWater(null);
+    if (!withWater || !fetched.length) {
+      setWaterLoading(false);
+      return;
+    }
+    const ctrl = new AbortController();
+    setWaterLoading(true);
+    checkNearWater(fetched, ctrl.signal)
+      .then((ids) => {
+        setNearWater(ids);
+        setWaterLoading(false);
+      })
+      .catch((e: Error) => {
+        if (ctrl.signal.aborted) return;
+        console.warn(e); // dann bleibt „Am Wasser" bei allen Orten unbekannt (?)
+        setWaterLoading(false);
+      });
+    return () => ctrl.abort();
+  }, [fetched, withWater]);
+
+  const places = useMemo(
+    () => (nearWater ? fetched.map((p) => ({ ...p, nearWater: nearWater.has(p.id) })) : fetched),
+    [fetched, nearWater],
+  );
 
   const when = useMemo(() => (whenMode === 'now' ? now : new Date(whenCustom)), [whenMode, now, whenCustom]);
-  const ctx: CriterionContext = useMemo(() => ({ when, waterChecked: withWater }), [when, withWater]);
+  const ctx: CriterionContext = useMemo(() => ({ when, waterChecked: withWater && nearWater !== null }), [when, withWater, nearWater]);
 
   const evaluated: ListItem[] = useMemo(
     () =>
@@ -355,8 +385,8 @@ export default function App() {
 
               <div className="results-head">
                 <div className="results-count">
-                  {loading ? (
-                    <span className="loading">{attempt > 1 ? `Server überlastet – Ausweichserver ${attempt} …` : 'Suche Orte …'}</span>
+                  {loading || waterLoading ? (
+                    <span className="loading">{loading ? status : 'Prüfe, was am Wasser liegt …'}</span>
                   ) : error ? null : !categoryIds.length ? (
                     <span>Wähle oben mindestens eine Kategorie.</span>
                   ) : (
@@ -379,7 +409,7 @@ export default function App() {
                 </div>
               )}
 
-              {!loading && criteria.length > 0 && partialCount > 0 && (
+              {!loading && !waterLoading && criteria.length > 0 && partialCount > 0 && (
                 <button className="unknown-toggle" onClick={() => setShowUnknown((v) => !v)}>
                   {showUnknown
                     ? `Orte ohne Angabe ausblenden (${partialCount})`
@@ -415,7 +445,7 @@ export default function App() {
                 </div>
               )}
 
-              {!loading && !error && categoryIds.length > 0 && visible.length === 0 && (
+              {!loading && !waterLoading && !error && categoryIds.length > 0 && visible.length === 0 && (
                 <div className="empty">
                   <p>Nichts gefunden, das sicher passt.</p>
                   <p className="hint">Tipp: Umkreis vergrößern, mehr Kategorien wählen oder „Orte ohne Angabe" einblenden.</p>
@@ -450,7 +480,17 @@ export default function App() {
         </div>
 
         <footer className="credits">
-          Daten © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a>-Mitwirkende · Karte{' '}
+          Daten © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a>-Mitwirkende
+          {hasGeoapifyKey() && (
+            <>
+              {' '}
+              via{' '}
+              <a href="https://www.geoapify.com/" target="_blank" rel="noreferrer">
+                Geoapify
+              </a>
+            </>
+          )}{' '}
+          · Karte{' '}
           <a href="https://openfreemap.org" target="_blank" rel="noreferrer">OpenFreeMap</a> · Suche{' '}
           <a href="https://photon.komoot.io" target="_blank" rel="noreferrer">Photon</a>
         </footer>
@@ -461,6 +501,7 @@ export default function App() {
           center={center}
           radius={radius}
           places={mapPlaces}
+          attribution={hasGeoapifyKey() ? GEOAPIFY_ATTRIBUTION : undefined}
           selectedId={selected?.id}
           planStops={plan.stops}
           flyTo={flyTo}
@@ -472,7 +513,7 @@ export default function App() {
             🔍 In diesem Bereich suchen
           </button>
         )}
-        {loading && <div className="map-loading">{attempt > 1 ? `Ausweichserver ${attempt} …` : 'Lade Orte …'}</div>}
+        {loading && <div className="map-loading">{status === 'Suche Orte …' ? 'Lade Orte …' : status}</div>}
         {selected && (
           <PlaceDetail
             key={selected.id}

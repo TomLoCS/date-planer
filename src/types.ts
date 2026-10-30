@@ -20,6 +20,13 @@ export interface LatLon {
 
 export type OsmTags = Record<string, string>;
 
+/** Was gesucht wird – gilt für jede Datenquelle (Geoapify, Overpass, Demo). */
+export interface SearchParams {
+  center: LatLon;
+  radius: number;
+  categoryIds: string[];
+}
+
 /** Ein Ort aus OpenStreetMap, so wie die App ihn benutzt. */
 export interface Place extends LatLon {
   /** z. B. "node/123456" – eindeutig in OSM */
@@ -27,7 +34,7 @@ export interface Place extends LatLon {
   name: string;
   categoryId: string;
   tags: OsmTags;
-  /** liegt ≤ 120 m an See/Fluss/Küste (nur bekannt, wenn mit Wasser-Kriterium gesucht wurde) */
+  /** liegt ≤ 120 m an See/Fluss/Küste (nur bekannt, wenn das Wasser-Kriterium aktiv ist) */
   nearWater?: boolean;
 }
 
