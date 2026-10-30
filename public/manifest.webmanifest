@@ -1,0 +1,10 @@
+{
+  "name": "Date Planer",
+  "short_name": "Date Planer",
+  "description": "Dates und Freizeit nach deinen Kriterien auf der Karte planen.",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#fbf8f6",
+  "theme_color": "#e5484d",
+  "icons": [{ "src": "favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}
