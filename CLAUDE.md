@@ -18,6 +18,8 @@ Das Gedächtnis für dieses Projekt liegt im Obsidian-Vault des Users:
 - Kein Backend; Zustand in localStorage (`dp.*`-Keys), Pläne werden im URL-Hash `#plan=` geteilt.
 - `?demo` in der URL lädt fiktive Testorte (`src/dev/demoData.ts`).
 - Prüfen: `npm run typecheck`, `npm run build`. Dev-Server: `.claude/launch.json` → `date-planer`.
+- Deploy: Push auf `main` → GitHub Actions → GitHub Pages: https://tomlocs.github.io/date-planer/ (Repo `TomLoCS/date-planer`, öffentlich).
+- Der Ordner liegt auf einem NAS (`\\NasserRamussler\Main\...`); das Terminal-Panel kann dort nicht starten → Bash nutzen.
 
 ## User
 Erik, deutschsprachig. Will Bausteine verstehen statt Black-Box, mag modularen Code, Projekt soll erstmal 0 € kosten.

@@ -4,6 +4,8 @@ Dates & Freizeit nach Kriterien planen: Kategorien wählen (Essen, Natur, Kultur
 
 **Kosten: 0 €** – OpenStreetMap-Daten (Overpass), Karte von OpenFreeMap, Ortssuche über Photon, kein Backend.
 
+**Live:** https://tomlocs.github.io/date-planer/ (jeder Push auf `main` wird automatisch über GitHub Pages veröffentlicht)
+
 ## Starten
 
 ```bash
